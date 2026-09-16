@@ -89,10 +89,6 @@ public class DeviceController {
     }
 
     // ---- permissions ------------------------------------------------------
-    //
-    // pm clear revokes all runtime permissions, so Android 13+ re-prompts for
-    // POST_NOTIFICATIONS on next launch. Re-grant non-interactively right
-    // after clear so the system dialog never appears.
 
     public void grantPermission(String pkg, String permission) {
         shNoOut("shell", "pm", "grant", pkg, permission);
@@ -131,10 +127,11 @@ public class DeviceController {
 
     // ---- screenshots ------------------------------------------------------
     //
-    // Streams the PNG from the device via `adb exec-out screencap -p`, which
-    // avoids the temp file dance (write to /sdcard, pull, rm) and works on
-    // every Android version. Creates parent directories if missing, and
-    // prints the saved path + size so failures are visible in the log.
+    // Writes a PNG to the device, pulls it, deletes the remote copy. This is
+    // the reliable path — `adb exec-out screencap -p` corrupts the byte
+    // stream on some macOS adb builds (identical PNGs for every screen).
+    //
+    // Three round-trips, but byte-exact on every adb version we've tested.
 
     public void screenshot(String localPath) {
         File f = new File(localPath);
@@ -145,22 +142,18 @@ public class DeviceController {
                 System.err.println("  [warn] could not create dir: " + parent);
             }
         }
-        try {
-            String[] cmd = { "adb", "-s", udid, "exec-out", "screencap", "-p" };
-            Process p = new ProcessBuilder(cmd).redirectErrorStream(false).start();
-            long bytes;
-            try (InputStream in = p.getInputStream();
-                 OutputStream out = new FileOutputStream(f)) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
-                bytes = f.length();
-            }
-            p.waitFor(20, TimeUnit.SECONDS);
+
+        String remote = "/sdcard/__hot_screenshot.png";
+        shNoOut("shell", "screencap", "-p", remote);
+        shNoOut("pull", remote, localPath);
+        shNoOut("shell", "rm", remote);
+
+        if (f.exists() && f.length() > 0) {
             System.out.println("  screenshot saved: " + f.getAbsolutePath()
-                    + " (" + bytes + " bytes)");
-        } catch (Exception e) {
-            System.err.println("  [warn] screenshot failed: " + e.getMessage());
+                    + " (" + f.length() + " bytes)");
+        } else {
+            System.err.println("  [warn] screenshot NOT written: "
+                    + f.getAbsolutePath());
         }
     }
 
