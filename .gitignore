@@ -40,3 +40,9 @@ build/
 # --- uiautomator dumps (test artifacts, never commit) ---
 /ui-after-login.xml
 /xml/
+
+# IDE
+.idea/
+
+# Lowercase screens folder (test artifacts)
+screens/
