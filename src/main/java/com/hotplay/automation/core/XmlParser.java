@@ -12,6 +12,14 @@ import java.nio.charset.StandardCharsets;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Parses a uiautomator XML dump into a UiNode tree.
+ *
+ * Empty or whitespace-only input returns a synthetic empty root instead of
+ * throwing. This happens when uiautomator returns nothing (screen mid-render,
+ * device hiccup, adb hiccup) — the caller can then retry via waitFor polling
+ * without being interrupted by exceptions.
+ */
 public final class XmlParser {
     private XmlParser() {}
 
@@ -20,23 +28,28 @@ public final class XmlParser {
 
     /** Parse a uiautomator XML dump and return the root UiNode (the first <node>). */
     public static UiNode parse(String xml) {
+        if (xml == null || xml.trim().isEmpty()) {
+            return emptyRoot();
+        }
         try {
             DocumentBuilderFactory f = DocumentBuilderFactory.newInstance();
-            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            f.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd",
+                    false);
             DocumentBuilder b = f.newDocumentBuilder();
-            Document doc = b.parse(new ByteArrayInputStream(xml.getBytes(StandardCharsets.UTF_8)));
+            Document doc = b.parse(new ByteArrayInputStream(
+                    xml.getBytes(StandardCharsets.UTF_8)));
 
             NodeList nodes = doc.getElementsByTagName("node");
-            if (nodes.getLength() == 0) return null;
-            // The first <node> element is the root (a <hierarchy> can only have one).
+            if (nodes.getLength() == 0) return emptyRoot();
+
             Element rootEl = (Element) nodes.item(0);
-            // Wrap it in a synthetic parent so its children are discoverable
-            // even when the root itself is not the node we want.
             UiNode root = toUiNode(rootEl);
             attachChildren(rootEl, root);
             return root;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse UI XML: " + e.getMessage(), e);
+            // Single warning line instead of a stack trace per poll.
+            System.err.println("  [warn] XML parse failed: " + e.getMessage());
+            return emptyRoot();
         }
     }
 
@@ -70,6 +83,14 @@ public final class XmlParser {
                 bool(e, "selected"),
                 bool(e, "scrollable"),
                 b[0], b[1], b[2], b[3]);
+    }
+
+    /** Synthetic empty root — all findById / findByText calls return null. */
+    private static UiNode emptyRoot() {
+        return new UiNode("", "", "", "", "",
+                false, false, false, false,
+                false, false, false, false,
+                0, 0, 0, 0);
     }
 
     private static String attr(Element e, String name) {

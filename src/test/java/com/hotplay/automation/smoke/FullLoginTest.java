@@ -22,7 +22,7 @@ import java.util.function.BooleanSupplier;
  *   2. assert Login screen
  *   3. fill ID + phone, tick terms, click התחבר
  *   4. wait for OTP, assert
- *   5. type 123456, click שלח
+ *   5. type 123456, wait for confirm button, click שלח
  *   6. handle site picker if shown       (SitePickerFlow — optional)
  *   7. handle callback dialog if shown   (CallbackDialogFlow — optional)
  *   8. wait for Live Mosaic, assert
@@ -43,16 +43,19 @@ public class FullLoginTest {
 
     private static final String PKG = TestConfig.HOT_PACKAGE;
 
+    // Login screen
     private static final String ID_CLOSE_LOGIN = PKG + ":id/close_dialog_btn";
     private static final String ID_ID_FIELD    = PKG + ":id/account_edittext";
     private static final String ID_PHONE_FIELD = PKG + ":id/pin_edittext";
     private static final String ID_TERMS       = PKG + ":id/approve_terms_checkbox";
     private static final String ID_CONNECT     = PKG + ":id/connect_btn";
 
+    // OTP screen
     private static final String ID_OTP_FIELD   = PKG + ":id/token_edittext";
     private static final String ID_SEND        = PKG + ":id/confirm_button";
     private static final String TXT_OTP_SUB    = "אנא הזן את קוד האימות שנשלח ב-SMS";
 
+    // Live Mosaic
     private static final String ID_MOSAIC_GRID = PKG + ":id/all_channels_fragment_recycler_view";
     private static final String TXT_TOP_ALL    = "הכל";
 
@@ -137,16 +140,20 @@ public class FullLoginTest {
             sleep(300);
             sendDigits(device, TestConfig.OTP_CODE);
 
+            // Give the app a moment to register all 6 digits before polling.
+            // The backend may also validate the code server-side, which adds
+            // latency; the 1.5s settle avoids polling during that window.
+            sleep(1500);
+
             waitFor(() -> {
                 UiNode n = device.dumpUi().findById(ID_SEND);
                 return n != null && n.enabled;
-            }, TestConfig.SCREEN_WAIT_TIMEOUT, "confirm_button enabled");
+            }, 30_000, "confirm_button enabled");
 
             click(device, ID_SEND, "שלח");
 
             // ---------- 6. POST-OTP DIALOGS ----------
-            // SitePickerFlow and CallbackDialogFlow now write their screenshots
-            // to TestConfig.RUN_DIR instead of TestConfig.CURRENT_DIR.
+            // Both flows write screenshots to TestConfig.RUN_DIR.
             new SitePickerFlow(device, validator).handleIfPresent();
             new CallbackDialogFlow(device, validator).handleIfPresent();
 
