@@ -17,7 +17,7 @@ import java.util.function.BooleanSupplier;
 /**
  * End-to-end HOT login journey over ADB.
  *
- *   1. cold start
+ *   1. cold start (pm clear + permission grant + launch)
  *   2. assert Login screen
  *   3. fill ID + phone, tick terms, click התחבר
  *   4. wait for OTP, assert
@@ -73,6 +73,13 @@ public class FullLoginTest {
             System.out.println("--- Cold start ---");
             device.clearAppData(TestConfig.HOT_PACKAGE);
             device.forceStopApp(TestConfig.HOT_PACKAGE);
+
+            // pm clear revokes all runtime permissions. Android 13+ re-prompts
+            // for POST_NOTIFICATIONS on the next launch, blocking the login
+            // screen. Re-grant non-interactively so no system dialog appears.
+            device.grantPermission(TestConfig.HOT_PACKAGE,
+                    "android.permission.POST_NOTIFICATIONS");
+
             device.launchApp(TestConfig.HOT_PACKAGE, TestConfig.HOT_ACTIVITY);
 
             waitFor(() -> device.dumpUi().findById(ID_CONNECT) != null,
@@ -131,15 +138,15 @@ public class FullLoginTest {
             // ---------- 6. POST-OTP DIALOGS (either, both, or neither) ----------
             //
             // Two known post-OTP dialogs exist on HOT Play:
-            //   a. Site picker      ("בחר אתר")         — multi-site accounts only
+            //   a. Site picker      ("בחר אתר")          — multi-site accounts only
             //   b. Legal callback   ("לקוח יקר, ...")    — always shown on 1st login
             //
             // We try both, in either order — each flow returns false if its
             // dialog isn't there, so this is safe regardless of app version.
             //
-            // Order matters when both can appear: try site picker first, because
-            // in observed runs it appears before the legal notice. If your
-            // device shows them the other way, swap the two lines below.
+            // Order matters when both can appear: try site picker first,
+            // because in observed runs it appears before the legal notice.
+            // If your device shows them the other way, swap the two lines.
             new SitePickerFlow(device, validator).handleIfPresent();
             new CallbackDialogFlow(device, validator).handleIfPresent();
 

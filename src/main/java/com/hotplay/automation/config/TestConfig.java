@@ -4,7 +4,10 @@ public final class TestConfig {
     private TestConfig() {}
 
     // --- Device ---
-    public static final String DEVICE_UDID = "192.168.1.88:5555";
+    // Override at runtime via HOT_DEVICE_UDID env var, e.g.
+    //   HOT_DEVICE_UDID=192.168.1.88:5555 mvn exec:java ...
+    public static final String DEVICE_UDID =
+            System.getenv().getOrDefault("HOT_DEVICE_UDID", "192.168.1.88:5555");
 
     // --- App (real values from your dumps) ---
     public static final String HOT_PACKAGE  = "com.applicaster.il.hotvod";
