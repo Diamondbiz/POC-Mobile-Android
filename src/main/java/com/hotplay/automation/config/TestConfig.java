@@ -4,7 +4,7 @@ public final class TestConfig {
     private TestConfig() {}
 
     // --- Device ---
-    public static final String DEVICE_UDID = "192.168.1.167:5555";
+    public static final String DEVICE_UDID = "192.168.1.88:5555";
 
     // --- App (real values from your dumps) ---
     public static final String HOT_PACKAGE  = "com.applicaster.il.hotvod";
