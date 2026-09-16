@@ -12,6 +12,7 @@ import com.hotplay.automation.profiles.OtpScreenProfile;
 import com.hotplay.automation.validators.ScreenAssertionResult;
 import com.hotplay.automation.validators.ScreenValidator;
 
+import java.io.File;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -26,6 +27,10 @@ import java.util.function.BooleanSupplier;
  *   7. handle callback dialog if shown   (CallbackDialogFlow — optional)
  *   8. wait for Live Mosaic, assert
  *
+ * Screenshots and dumps from each run are written to
+ *   Screens/Runs/<timestamp>_FullLoginTest/
+ * so previous runs are preserved.
+ *
  * Run:
  *   cd /Users/Johnny/IdeaProjects/POC-Mobile-Android
  *   mvn clean test-compile exec:java \
@@ -38,19 +43,16 @@ public class FullLoginTest {
 
     private static final String PKG = TestConfig.HOT_PACKAGE;
 
-    // Login screen
     private static final String ID_CLOSE_LOGIN = PKG + ":id/close_dialog_btn";
     private static final String ID_ID_FIELD    = PKG + ":id/account_edittext";
     private static final String ID_PHONE_FIELD = PKG + ":id/pin_edittext";
     private static final String ID_TERMS       = PKG + ":id/approve_terms_checkbox";
     private static final String ID_CONNECT     = PKG + ":id/connect_btn";
 
-    // OTP screen
     private static final String ID_OTP_FIELD   = PKG + ":id/token_edittext";
     private static final String ID_SEND        = PKG + ":id/confirm_button";
     private static final String TXT_OTP_SUB    = "אנא הזן את קוד האימות שנשלח ב-SMS";
 
-    // Live Mosaic
     private static final String ID_MOSAIC_GRID = PKG + ":id/all_channels_fragment_recycler_view";
     private static final String TXT_TOP_ALL    = "הכל";
 
@@ -58,6 +60,12 @@ public class FullLoginTest {
 
     public static void main(String[] args) {
         System.out.println("================ FullLoginTest ================");
+
+        // Create the per-run output folder up-front and announce it.
+        File runDir = new File(TestConfig.RUN_DIR);
+        runDir.mkdirs();
+        System.out.println("Run folder: " + runDir.getAbsolutePath());
+        System.out.println();
 
         DeviceController device = new DeviceController(TestConfig.DEVICE_UDID);
         if (!device.isConnected()) device.connect();
@@ -74,9 +82,8 @@ public class FullLoginTest {
             device.clearAppData(TestConfig.HOT_PACKAGE);
             device.forceStopApp(TestConfig.HOT_PACKAGE);
 
-            // pm clear revokes all runtime permissions. Android 13+ re-prompts
-            // for POST_NOTIFICATIONS on the next launch, blocking the login
-            // screen. Re-grant non-interactively so no system dialog appears.
+            // pm clear revokes runtime permissions; Android 13+ re-prompts
+            // POST_NOTIFICATIONS on next launch. Re-grant non-interactively.
             device.grantPermission(TestConfig.HOT_PACKAGE,
                     "android.permission.POST_NOTIFICATIONS");
 
@@ -89,8 +96,9 @@ public class FullLoginTest {
             System.out.println("--- Assert Login screen ---");
             ScreenAssertionResult login = validator.validate(LoginScreenProfile.get());
             System.out.println(login.summary());
+            device.screenshot(TestConfig.RUN_DIR + "/01_login.png");
             if (!login.passed()) {
-                device.screenshot(TestConfig.FAIL_DIR + "/login_fail.png");
+                device.screenshot(TestConfig.RUN_DIR + "/01_login_fail.png");
                 System.exit(2);
             }
 
@@ -117,8 +125,9 @@ public class FullLoginTest {
             System.out.println("--- Assert OTP screen ---");
             ScreenAssertionResult otp = validator.validate(OtpScreenProfile.get());
             System.out.println(otp.summary());
+            device.screenshot(TestConfig.RUN_DIR + "/02_otp.png");
             if (!otp.passed()) {
-                device.screenshot(TestConfig.FAIL_DIR + "/otp_fail.png");
+                device.screenshot(TestConfig.RUN_DIR + "/02_otp_fail.png");
                 System.exit(3);
             }
 
@@ -135,18 +144,9 @@ public class FullLoginTest {
 
             click(device, ID_SEND, "שלח");
 
-            // ---------- 6. POST-OTP DIALOGS (either, both, or neither) ----------
-            //
-            // Two known post-OTP dialogs exist on HOT Play:
-            //   a. Site picker      ("בחר אתר")          — multi-site accounts only
-            //   b. Legal callback   ("לקוח יקר, ...")    — always shown on 1st login
-            //
-            // We try both, in either order — each flow returns false if its
-            // dialog isn't there, so this is safe regardless of app version.
-            //
-            // Order matters when both can appear: try site picker first,
-            // because in observed runs it appears before the legal notice.
-            // If your device shows them the other way, swap the two lines.
+            // ---------- 6. POST-OTP DIALOGS ----------
+            // SitePickerFlow and CallbackDialogFlow now write their screenshots
+            // to TestConfig.RUN_DIR instead of TestConfig.CURRENT_DIR.
             new SitePickerFlow(device, validator).handleIfPresent();
             new CallbackDialogFlow(device, validator).handleIfPresent();
 
@@ -160,18 +160,20 @@ public class FullLoginTest {
             System.out.println("--- Assert Live Mosaic ---");
             ScreenAssertionResult mosaic = validator.validate(LiveMosaicProfile.get());
             System.out.println(mosaic.summary());
-            device.screenshot(TestConfig.CURRENT_DIR + "/mosaic_pass.png");
+            device.screenshot(TestConfig.RUN_DIR + "/03_mosaic.png");
             if (!mosaic.passed()) {
-                device.screenshot(TestConfig.FAIL_DIR + "/mosaic_fail.png");
+                device.screenshot(TestConfig.RUN_DIR + "/03_mosaic_fail.png");
                 System.exit(4);
             }
 
+            System.out.println();
             System.out.println("================ FullLoginTest: PASS ================");
+            System.out.println("Screenshots: " + runDir.getAbsolutePath());
             System.exit(0);
 
         } catch (Throwable t) {
             t.printStackTrace();
-            try { device.screenshot(TestConfig.FAIL_DIR + "/exception.png"); }
+            try { device.screenshot(TestConfig.RUN_DIR + "/99_exception.png"); }
             catch (Throwable ignored) {}
             System.exit(99);
         }

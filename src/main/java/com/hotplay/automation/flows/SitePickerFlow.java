@@ -18,17 +18,20 @@ import com.hotplay.automation.validators.ScreenValidator;
  *    substring ("אולג QA"), not by id.
  *  - After tapping the row we send DPAD_CENTER as a belt-and-braces fallback,
  *    because some Android TV ListViews only honour focus-based selection.
+ *  - Screenshots are written to TestConfig.RUN_DIR so every run preserves
+ *    its own folder (Screens/Runs/<timestamp>_FullLoginTest/).
  */
 public class SitePickerFlow {
 
     /** How long to wait for the dialog before deciding it won't appear. */
     private static final long APPEAR_TIMEOUT_MS = 8_000;
+    private static final long DISMISS_TIMEOUT_MS = 6_000;
 
     private final DeviceController device;
     private final ScreenValidator  validator;
 
     public SitePickerFlow(DeviceController device, ScreenValidator validator) {
-        this.device = device;
+        this.device    = device;
         this.validator = validator;
     }
 
@@ -48,9 +51,9 @@ public class SitePickerFlow {
         // ---- assert via the profile ----
         ScreenAssertionResult result = validator.validate(SitePickerProfile.get());
         System.out.println(result.summary());
-        device.screenshot(TestConfig.CURRENT_DIR + "/site_picker.png");
+        device.screenshot(TestConfig.RUN_DIR + "/04_site_picker.png");
         if (!result.passed()) {
-            device.screenshot(TestConfig.FAIL_DIR + "/site_picker_fail.png");
+            device.screenshot(TestConfig.RUN_DIR + "/04_site_picker_fail.png");
             throw new AssertionError("Site picker assertion failed: "
                     + result.failures());
         }
@@ -91,7 +94,7 @@ public class SitePickerFlow {
     }
 
     private void waitForDismissal() {
-        long deadline = System.currentTimeMillis() + 8_000;
+        long deadline = System.currentTimeMillis() + DISMISS_TIMEOUT_MS;
         while (System.currentTimeMillis() < deadline) {
             UiNode root = device.dumpUi();
             if (root.findById(SitePickerProfile.ID_DIALOG_LIST) == null) return;

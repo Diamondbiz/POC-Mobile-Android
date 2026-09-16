@@ -9,7 +9,8 @@ import com.hotplay.automation.validators.ScreenAssertionResult;
 import com.hotplay.automation.validators.ScreenValidator;
 
 /**
- * Handles the generic HOT "callback dialog" (legal notice, notices, etc.).
+ * Handles the generic HOT "callback dialog" (legal notice, subscription
+ * warnings, etc.).
  *
  * Behaviour:
  *   - Polls for the dialog for a short window.
@@ -17,11 +18,12 @@ import com.hotplay.automation.validators.ScreenValidator;
  *   - If it appears, asserts its structure, prints the message, then presses
  *     the action button (אישור / המשך / etc. — read dynamically).
  *   - Waits for the dialog to dismiss before returning.
+ *   - Screenshots go to TestConfig.RUN_DIR so every run keeps its own folder.
  */
 public class CallbackDialogFlow {
 
-    private static final long APPEAR_TIMEOUT_MS    = 6_000;
-    private static final long DISMISS_TIMEOUT_MS   = 6_000;
+    private static final long APPEAR_TIMEOUT_MS  = 6_000;
+    private static final long DISMISS_TIMEOUT_MS = 6_000;
 
     private final DeviceController device;
     private final ScreenValidator  validator;
@@ -39,9 +41,9 @@ public class CallbackDialogFlow {
         // ---- assert structure ----
         ScreenAssertionResult result = validator.validate(CallbackDialogProfile.get());
         System.out.println(result.summary());
-        device.screenshot(TestConfig.CURRENT_DIR + "/callback_dialog.png");
+        device.screenshot(TestConfig.RUN_DIR + "/05_callback_dialog.png");
         if (!result.passed()) {
-            device.screenshot(TestConfig.FAIL_DIR + "/callback_dialog_fail.png");
+            device.screenshot(TestConfig.RUN_DIR + "/05_callback_dialog_fail.png");
             throw new AssertionError("Callback dialog assertion failed: "
                     + result.failures());
         }

@@ -39,7 +39,6 @@ public class DeviceController {
             cmd[0] = "adb"; cmd[1] = "-s"; cmd[2] = udid;
             System.arraycopy(args, 0, cmd, 3, args.length);
             Process p = new ProcessBuilder(cmd).redirectErrorStream(true).start();
-            // drain stdout+stderr so the process doesn't block on a full pipe
             drain(p.getInputStream());
             p.waitFor(20, TimeUnit.SECONDS);
         } catch (Exception e) {
@@ -94,10 +93,6 @@ public class DeviceController {
     // pm clear revokes all runtime permissions, so Android 13+ re-prompts for
     // POST_NOTIFICATIONS on next launch. Re-grant non-interactively right
     // after clear so the system dialog never appears.
-    //
-    // pm grant prints an error and returns non-zero if the app doesn't
-    // declare the permission, or if the permission doesn't exist on this
-    // Android version. Both are harmless — the call is a no-op in that case.
 
     public void grantPermission(String pkg, String permission) {
         shNoOut("shell", "pm", "grant", pkg, permission);
@@ -109,18 +104,15 @@ public class DeviceController {
 
     // ---- UI hierarchy -----------------------------------------------------
 
-    /** Dump the UI and parse it into a UiNode tree. */
     public UiNode dumpUi() {
         return XmlParser.parse(dumpUiXml());
     }
 
-    /** Raw XML string (kept for logging / archival). */
     public String dumpUiXml() {
         shNoOut("shell", "uiautomator", "dump", "/sdcard/window_dump.xml");
         return sh("shell", "cat", "/sdcard/window_dump.xml");
     }
 
-    /** Save a UI dump to the local xml/ folder and return its path. */
     public String dumpUiXmlToFile(String tag) {
         String xml = dumpUiXml();
         try {
@@ -138,13 +130,38 @@ public class DeviceController {
     }
 
     // ---- screenshots ------------------------------------------------------
+    //
+    // Streams the PNG from the device via `adb exec-out screencap -p`, which
+    // avoids the temp file dance (write to /sdcard, pull, rm) and works on
+    // every Android version. Creates parent directories if missing, and
+    // prints the saved path + size so failures are visible in the log.
 
     public void screenshot(String localPath) {
-        String remote = "/sdcard/screen.png";
-        shNoOut("shell", "screencap", "-p", remote);
-        new File(localPath).getParentFile().mkdirs();
-        shNoOut("pull", remote, localPath);
-        shNoOut("shell", "rm", remote);
+        File f = new File(localPath);
+        File parent = f.getParentFile();
+        if (parent != null && !parent.exists()) {
+            boolean ok = parent.mkdirs();
+            if (!ok && !parent.exists()) {
+                System.err.println("  [warn] could not create dir: " + parent);
+            }
+        }
+        try {
+            String[] cmd = { "adb", "-s", udid, "exec-out", "screencap", "-p" };
+            Process p = new ProcessBuilder(cmd).redirectErrorStream(false).start();
+            long bytes;
+            try (InputStream in = p.getInputStream();
+                 OutputStream out = new FileOutputStream(f)) {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) != -1) out.write(buf, 0, n);
+                bytes = f.length();
+            }
+            p.waitFor(20, TimeUnit.SECONDS);
+            System.out.println("  screenshot saved: " + f.getAbsolutePath()
+                    + " (" + bytes + " bytes)");
+        } catch (Exception e) {
+            System.err.println("  [warn] screenshot failed: " + e.getMessage());
+        }
     }
 
     // ---- input ------------------------------------------------------------
@@ -163,7 +180,6 @@ public class DeviceController {
     }
 
     public void text(String s) {
-        // `input text` treats spaces specially — encode them as %s
         shNoOut("shell", "input", "text", s.replace(" ", "%s"));
     }
 }
