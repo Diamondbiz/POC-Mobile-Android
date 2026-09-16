@@ -160,22 +160,39 @@ is planned.
 
 
 Configuration
-Everything configurable lives in config/TestConfig.java:
+Everything configurable lives in `config/TestConfig.java`. Four values are
+also overridable at runtime via environment variables:
 
-DEVICE_UDID — the target device address (default 192.168.1.167:5555)
+| Setting | Default | Env override |
+|---|---|---|
+| `DEVICE_UDID` | `192.168.1.88:5555` | `HOT_DEVICE_UDID` |
+| `PROJECT_ROOT` | JVM working directory | `HOT_PROJECT_ROOT` |
+| Run folder suffix | `FullLoginTest` | `HOT_RUN_NAME` |
+| Full run folder name | `<timestamp>_<testname>` | `HOT_RUN_TAG` |
 
-HOT_PACKAGE — com.applicaster.il.hotvod
+Fixed values (edit the file to change):
 
-HOT_ACTIVITY — il.net.hot.sharedvod.ui.activities.SplashActivity
+- `HOT_PACKAGE` — `com.applicaster.il.hotvod`
+- `HOT_ACTIVITY` — `il.net.hot.sharedvod.ui.activities.SplashActivity`
+- Test data — `ID_NUMBER`, `PHONE_NUMBER`, `OTP_CODE`
+- Timeouts — `APP_LOAD_TIMEOUT`, `SCREEN_WAIT_TIMEOUT`, `POLL_INTERVAL`
+- Image comparison — `SIMILARITY_THRESHOLD`, `PIXEL_TOLERANCE`
 
-Test data — ID_NUMBER, PHONE_NUMBER, OTP_CODE
+Running against a different device, without editing source:
 
-Folder paths — CURRENT_DIR, FAIL_DIR, XML_DIR, LOGS_DIR
+```bash
+HOT_DEVICE_UDID=192.168.1.90:5555 mvn exec:java \
+  -Dexec.mainClass=com.hotplay.automation.smoke.FullLoginTest \
+  -Dexec.classpathScope=test
+```
 
-Timeouts — APP_LOAD_TIMEOUT, SCREEN_WAIT_TIMEOUT, POLL_INTERVAL
+**Cold start sequence** (in `FullLoginTest`):
 
-Change device or credentials here; nothing else needs editing.
-
+1. `pm clear` — wipes app data and revokes runtime permissions
+2. `am force-stop`
+3. `pm grant POST_NOTIFICATIONS` — restores the notification permission so
+   the Android 13+ system dialog does not block the login screen
+4. `am start` — launches `SplashActivity`
 
 Adding a new screen
 Three steps, no existing file changes.
@@ -200,22 +217,69 @@ Marker types: RESOURCE_ID, TEXT, TEXT_PRESENT_ANYWHERE.
 
 3. Run. No changes to core/, validators/, or any other test.
 
-Artifacts
-Each run writes to timestamped folders, all ignored by .gitignore:
+##Artifacts
+Every run creates its own timestamped folder under `Screens/Runs/`, so
+previous runs are preserved:
+
+```
+Screens/
+├── Expected/                                       ← committed baselines (tracked)
+└── Runs/
+    ├── 2026-09-16_08-07-05_FullLoginTest/
+    │   ├── 01_login.png
+    │   ├── 02_otp.png
+    │   ├── 03_mosaic.png
+    │   ├── 04_site_picker.png
+    │   └── 05_callback_dialog.png
+    └── 2026-09-16_08-21-33_FullLoginTest/
+        └── ...
+```
+Filenames are numbered so `ls` sorts them in journey order:
+`01_login` → `02_otp` → `03_mosaic` → `04_site_picker` → `05_callback_dialog`.
+
+Additional folders, all gitignored:
+
+| Folder | Contents | Tracked? |
+|---|---|---|
+| `Screens/Expected/` | Reference baselines | Yes |
+| `Screens/Runs/` | Per-run screenshots | No |
+| `Screens/Fail/` | Failed-run screenshots (legacy) | No |
+| `logs/` | Text log output | No |
+| `xml/` | uiautomator dumps | No |
+
+Nothing under `Screens/Runs/`, `xml/`, or `logs/` is tracked — each clone
+starts clean and produces its own artifacts on first run.
+
+##Known limitations
+- **Single device only** — the framework targets one `DEVICE_UDID` at a time.
+- **Tests use `main()`**, not TestNG/JUnit. Migration planned for parallel and
+  multi-device runs.
+- **Test data is hardcoded** in `TestConfig` (`ID_NUMBER`, `PHONE_NUMBER`,
+  `OTP_CODE`). Parameterize before handing this to multiple testers.
+- **OTP is a fixed value** (`123456`). If the backend stops accepting it, the
+  test fails at `confirm_button enabled`. Fetching the real OTP from the
+  backend or SMS is planned work.
+- **Crop comparison is available** via `ImageComparator` but no screen uses
+  it yet — no baselines exist under `Screens/Expected/`.
+- **Android TV vs. mobile** — this repo targets **mobile**. The Android TV /
+  Big Screen flow is a separate project.
 
 
-Folder	                         Contents	              Tracked?
+## Recent changes. 16/9/26
 
-Screens/Expected/	           Reference baselines.        	Yes
-Screens/Current screen/	     Current run screenshots	     No
-Screens/Fail/	               Failed screenshots	           No
-logs/                        JSON test logs                No
-xml/                       	 uiautomator dumps	           No
-test-logs/	                 Plain text logger output	     No
+- **Per-run artifact folders** — every run writes to
+  `Screens/Runs/<timestamp>_<testname>/` so previous runs are preserved.
+- **`screenshot()` uses `adb exec-out screencap -p`** — streams directly into
+  the target file, prints saved path and byte count.
+- **`DEVICE_UDID` is env-overridable** via `HOT_DEVICE_UDID`.
+- **`PROJECT_ROOT` resolves at runtime** via `System.getProperty("user.dir")`
+  — a fresh clone in `/tmp` writes to `/tmp`, not to a hardcoded path.
+- **Cold start pre-grants `POST_NOTIFICATIONS`** via `pm grant`, bypassing the
+  Android 13+ dialog on every run.
+- **Two optional post-OTP dialogs handled** — site picker (`בחר אתר`) and
+  legal notice (`לקוח יקר, ...`).
 
-Known limitations
-Absolute paths are hardcoded to /Users/Johnny/IdeaProjects/POC-Mobile-Android. Other machines must edit TestConfig.PROJECT_ROOT.
 
-Single device only — one DEVICE_UDID at a time.
-Tests use main(), not TestNG/JUnit. Migration planned for parallel / multi-device runs.
-Crop comparison is available via ImageComparator but not yet used in any profile.
+
+
+  
